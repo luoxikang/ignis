@@ -1,3 +1,10 @@
+> **Fork notice (downstream)**: this fork adds a multi-tenant layer (single process,
+> one vault directory per user, identity from a reverse-proxy signed cookie) for
+> private team deployments. Upstream: [Nystik-gh/ignis](https://github.com/Nystik-gh/ignis) —
+> AGPL-3.0-or-later. Changes: new `apps/ignis-server/server/tenant.js` plus minimal
+> wiring in `config.js` / `index.js` / `routes/bootstrap.js`; `entrypoint.sh` no longer
+> chowns `/vaults` (host-managed ownership). Source offer is injected into the app UI.
+
 <section>
   <p align="center">
       <img src="images/ignis.png" alt="Ignis logo" width="200" height="200">

@@ -105,6 +105,16 @@ module.exports = {
   demoTemplateDir:
     process.env.DEMO_TEMPLATE_DIR || path.join(__dirname, "demo-template"),
 
+  // Tenant mode (downstream fork, AZ-DSK-F-013): one directory under VAULT_ROOT = one
+  // tenant; identity from the gate's signed session cookie (shared SESSION_SECRET).
+  tenantMode: process.env.TENANT_MODE === "true",
+  tenantSourceUrl:
+    process.env.TENANT_SOURCE_URL || "https://github.com/luoxikang/ignis",
+  tenantAllowedOrigins: (process.env.TENANT_ALLOWED_ORIGINS || "")
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean),
+
   obsidianAssetsPath:
     process.env.OBSIDIAN_ASSETS_PATH ||
     path.join(REPO_ROOT, "investigation", "obsidian_1.12.7_unpacked"),

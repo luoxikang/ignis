@@ -221,6 +221,12 @@ function invalidateAll() {
 }
 
 async function warmUp() {
+  // Tenant mode: skip pre-building every tenant's entry at startup — build lazily
+  // per request instead (memory stays proportional to active tenants, not all users).
+  if (config.tenantMode) {
+    return;
+  }
+
   const ids = Object.keys(config.vaults);
 
   for (const id of ids) {

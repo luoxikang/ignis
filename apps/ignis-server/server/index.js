@@ -25,6 +25,7 @@ const pluginRoutes = require("./routes/plugins");
 writeCoalescer.configure({ writeCoalesceMs: settings.get("writeCoalesceMs") });
 const { flushAll } = writeCoalescer;
 const { setupDemo, wireDemoWebSocket } = require("./demo");
+const { setupTenant, wireTenantWebSocket } = require("./tenant");
 
 const REPO_ROOT = path.join(__dirname, "..", "..", "..");
 
@@ -89,6 +90,7 @@ app.use("/assets", express.static(path.join(__dirname, "assets")));
 // Demo mode: layers session/quota/allowlist middleware on top of the existing routes.
 // Must run BEFORE the routes are mounted. No-op when DEMO_MODE != true.
 setupDemo(app);
+setupTenant(app);
 
 app.use("/api/fs", fsRoutes);
 app.use("/api/vault", vaultRoutes);
@@ -194,6 +196,16 @@ function buildIndexHtml() {
     );
   }
 
+  if (config.tenantMode) {
+    // AGPL-3.0 §13: prominent source offer on every page load (downstream fork).
+    html = html.replace(
+      "</body>",
+      '<a href="' +
+        config.tenantSourceUrl +
+        '" target="_blank" rel="noopener" style="position:fixed;right:8px;bottom:6px;font-size:11px;opacity:.55;z-index:9999;">Source</a></body>',
+    );
+  }
+
   cachedHtml = html;
   return cachedHtml;
 }
@@ -254,6 +266,7 @@ const wss = setupWebSocket(server, {
 });
 vaultLifecycle.setWss(wss);
 wireDemoWebSocket(server);
+wireTenantWebSocket(server);
 
 // Invalidate stored tree on any file change.
 watcher.addGlobalListener((vaultId) =>

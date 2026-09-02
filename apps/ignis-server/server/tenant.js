@@ -139,11 +139,18 @@ function setupTenant(app) {
   });
 
   // Inbound anchoring: force the tenant's own vault id on every addressed route.
-  // Writing it unconditionally (including when absent) removes the upstream
-  // defaultVaultId fallback — the first directory under VAULT_ROOT can never be
-  // reached by omission. Foreign values are overwritten, never trusted.
+  // An explicitly foreign vault id is refused (403) — refusal beats silent rewriting;
+  // an absent one is written in, which removes the upstream defaultVaultId fallback
+  // (the first directory under VAULT_ROOT can never be reached by omission).
   for (const mount of ["/api/fs", "/api/bootstrap", "/api/vault", "/api/plugins"]) {
     app.use(mount, (req, res, next) => {
+      const requested =
+        (req.query && req.query.vault) || (req.body && req.body.vault);
+
+      if (requested && requested !== req._tenantSub) {
+        return refuse(res);
+      }
+
       if (req.query) {
         req.query.vault = req._tenantSub;
       }

@@ -1,0 +1,9 @@
+{
+  "id": "ignis-ob-browser",
+  "name": "Ob Browser",
+  "version": "0.1.0",
+  "minAppVersion": "1.12.0",
+  "description": "Cloud-embedded browser (Coder WP session service) rendered as a CDP canvas in Obsidian.",
+  "author": "AZ Station",
+  "isDesktopOnly": false
+}

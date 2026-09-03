@@ -12,6 +12,16 @@ const headlessSyncDir = path.join(
   "obsidian",
 );
 
+const obBrowserDir = path.join(
+  __dirname,
+  "apps",
+  "ignis-server",
+  "server",
+  "plugins",
+  "ob-browser",
+  "obsidian",
+);
+
 // Compute version info once and share across per-package builds.
 const { version: semver } = require("./package.json");
 const build = process.env.IGNIS_BUILD || Date.now().toString(36).slice(-7);
@@ -56,6 +66,25 @@ Promise.all([
       fs.copyFileSync(
         path.join(headlessSyncDir, "styles.css"),
         path.join(headlessSyncDir, "dist", "ignis-headless-sync.css"),
+      );
+    }),
+
+  // Build ob-browser bundled plugin
+  esbuild
+    .build({
+      entryPoints: [path.join(obBrowserDir, "src", "main.js")],
+      bundle: true,
+      outfile: path.join(obBrowserDir, "dist", "ignis-ob-browser.js"),
+      format: "cjs",
+      platform: "browser",
+      target: ["chrome90"],
+      external: ["obsidian", "fs"],
+      logLevel: "info",
+    })
+    .then(() => {
+      fs.copyFileSync(
+        path.join(obBrowserDir, "styles.css"),
+        path.join(obBrowserDir, "dist", "ignis-ob-browser.css"),
       );
     }),
 ]).catch(() => process.exit(1));

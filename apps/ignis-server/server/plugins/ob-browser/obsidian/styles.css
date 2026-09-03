@@ -1,0 +1,41 @@
+/* ob-browser virtual plugin styles */
+.ob-browser-navigation {
+  display: flex;
+  gap: 4px;
+  align-items: center;
+  padding: 4px 8px;
+  border-bottom: 1px solid var(--background-modifier-border);
+  flex: 0 0 auto;
+}
+.ob-browser-nav-btn {
+  cursor: pointer;
+  padding: 2px 8px;
+  border-radius: 4px;
+  background: var(--background-secondary);
+  border: 1px solid var(--background-modifier-border);
+}
+.ob-browser-nav-btn:hover { background: var(--background-modifier-hover); }
+.ob-browser-address {
+  flex: 1 1 auto;
+  padding: 4px 10px;
+  border-radius: 6px;
+  border: 1px solid var(--background-modifier-border);
+  background: var(--background-secondary);
+  color: var(--text-normal);
+  font-size: 13px;
+}
+.ob-browser-canvas {
+  width: 100%;
+  min-height: 320px;
+  flex: 1 1 auto;
+  background: var(--background-secondary-alt);
+  outline: none;
+  image-rendering: auto;
+}
+.ob-browser-status {
+  flex: 0 0 auto;
+  padding: 2px 8px;
+  font-size: 11px;
+  color: var(--text-muted);
+  border-top: 1px solid var(--background-modifier-border);
+}

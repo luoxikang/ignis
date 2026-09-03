@@ -11,6 +11,9 @@
 const crypto = require("crypto");
 const url = require("url");
 const config = require("./config");
+// Q1 (AZ-DSK-F-014): ob-browser plugin token (HMAC w/ SESSION_SECRET) as alternative WS identity
+// for the WP reverse-dial (no gate cookie). Kept out of the kernel (packages/*) — tenant.js is the fork layer.
+const obToken = require("./plugins/ob-browser/ob-token");
 
 const COOKIE_NAME = process.env.TENANT_COOKIE_NAME || "azv2ob_session";
 const SECRET = process.env.SESSION_SECRET || "";
@@ -259,7 +262,17 @@ function wireTenantWebSocket(server) {
   server.emit = function (event, req, ...rest) {
     if (event === "upgrade") {
       const socket = rest[0];
-      const sub = resolveTenant(req);
+      let sub = resolveTenant(req);
+      let tokenVault = null;
+
+      // Q1 (AZ-DSK-F-014): WP reverse-dial carries no gate cookie. Accept a plugin-issued
+      // ob-browser token (?ob_token=) as the WS identity; anchor to token.user + token.vault.
+      if (!sub) {
+        const u0 = new url.URL(req.url, "http://localhost");
+        const t = u0.searchParams.get("ob_token");
+        const info = t && obToken.verify(t);
+        if (info) { sub = info.user; tokenVault = info.vault; }
+      }
 
       if (!sub) {
         destroyForbidden(socket);
@@ -269,7 +282,10 @@ function wireTenantWebSocket(server) {
       const u = new url.URL(req.url, "http://localhost");
       const requested = u.searchParams.get("vault");
 
-      if (!requested) {
+      if (tokenVault) {
+        u.searchParams.set("vault", tokenVault);
+        req.url = u.pathname + u.search;
+      } else if (!requested) {
         u.searchParams.set("vault", sub);
         req.url = u.pathname + u.search;
       } else if (requested !== sub) {
@@ -281,8 +297,12 @@ function wireTenantWebSocket(server) {
         const origin = req.headers.origin;
 
         if (!allowedOrigins.includes(origin)) {
-          destroyForbidden(socket);
-          return;
+          // Token-authenticated WS has no browser Origin (server-side dial) — allow it (Q1);
+          // cookie-authenticated WS keeps the origin check.
+          if (!tokenVault) {
+            destroyForbidden(socket);
+            return;
+          }
         }
       }
     }

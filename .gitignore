@@ -6,3 +6,5 @@ packages/*/dist/
 apps/ignis-server/server/build-info.json
 demo-vaults/
 data/
+node_modules/.npm-cache
+.npm-cache/

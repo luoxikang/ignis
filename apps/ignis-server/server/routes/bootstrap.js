@@ -277,7 +277,11 @@ router.get("/", async (req, res) => {
       encoding = "gzip";
     }
 
-    if (buf) {
+    // Tenant mode (downstream fork): the pre-compressed buffer has the full vault
+    // list and absolute host paths baked in at build time — serving it would bypass
+    // the tenant response wrapper entirely. Fall through to res.json so the tenant
+    // middleware filters per session (express compression() re-compresses on the fly).
+    if (buf && !config.tenantMode) {
       res.setHeader("Content-Type", "application/json; charset=utf-8");
       res.setHeader("Content-Encoding", encoding);
       res.setHeader("Content-Length", buf.length);

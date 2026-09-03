@@ -103,6 +103,9 @@ function setupTenant(app) {
     }
 
     req._tenantSub = sub;
+    // Authenticated API responses must never enter browser heuristic caches — a
+    // cached response from a different deployment era would leak cross-tenant names.
+    res.set("Cache-Control", "no-store");
     next();
   });
 
@@ -189,34 +192,49 @@ function setupTenant(app) {
       const origJson = res.json.bind(res);
 
       res.json = function (body) {
-        if (Array.isArray(body)) {
+        // The route handler may pass a SHARED cached object (bootstrap keeps a
+        // process-wide entry.response and hands it by reference in non-demo mode).
+        // Filter a deep clone — never mutate the cached original in place.
+        if (body === null || body === undefined) {
+          return origJson(body);
+        }
+
+        let view;
+
+        try {
+          view = JSON.parse(JSON.stringify(body));
+        } catch {
+          return origJson(body);
+        }
+
+        if (Array.isArray(view)) {
           // /api/vault/list shape: [{ id, name, path }, ...]
           return origJson(
-            body
+            view
               .filter((e) => e && e.id === sub)
               .map((e) => ({ ...e, path: stripVaultRoot(e.path) })),
           );
         }
 
-        if (body && typeof body === "object") {
-          if (Array.isArray(body.vaultList)) {
-            body.vaultList = body.vaultList
+        if (view && typeof view === "object") {
+          if (Array.isArray(view.vaultList)) {
+            view.vaultList = view.vaultList
               .filter((v) => v && v.id === sub)
               .map((v) => ({ ...v, path: stripVaultRoot(v.path) }));
           }
 
-          if (typeof body.path === "string") {
-            body.path = stripVaultRoot(body.path);
+          if (typeof view.path === "string") {
+            view.path = stripVaultRoot(view.path);
           }
 
-          if (body.vault && typeof body.vault === "object") {
-            if (typeof body.vault.path === "string") {
-              body.vault.path = stripVaultRoot(body.vault.path);
+          if (view.vault && typeof view.vault === "object") {
+            if (typeof view.vault.path === "string") {
+              view.vault.path = stripVaultRoot(view.vault.path);
             }
           }
         }
 
-        return origJson(body);
+        return origJson(view);
       };
 
       next();

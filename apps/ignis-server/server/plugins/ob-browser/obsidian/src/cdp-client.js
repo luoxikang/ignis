@@ -35,17 +35,49 @@ class CdpClient {
     return { token: this._token, ttl: body.ttl };
   }
 
-  // Subscribe to the channel once (idempotent). Registers frame + status handlers.
+  // Subscribe to the channel once (idempotent). Registers frame + status + frame_shard handlers.
   _ensureChannel() {
     if (this._chan) return this._chan;
     this._chan = this.ws.channel(CHANNEL);
     this._chan.subscribe("frame", (msg) => {
       if (this._frameHandler) this._frameHandler(msg);
     });
+    this._chan.subscribe("frame_shard", (msg) => this._onFrameShard(msg));
     this._chan.subscribe("status", (msg) => {
       if (this._statusHandler) this._statusHandler(msg);
     });
     return this._chan;
+  }
+
+  // P6: recombine frame_shard messages (server shards a large frame into <=16KB chunks) into a
+  // single logical frame and hand it to the frame handler as a normal {type:"frame"} message. Each
+  // shard carries {data.frame: {frame_id, chunk_index, chunk_total, metadata, chunk}}. A shard whose
+  // total==1 is already the whole frame (tiny frame) — pass straight through. A frame_id resolves the
+  // partial buffer; on timeout (missing shards) drop it and let HTTP polling recover. The HTTP polling
+  // fallback remains the safety net for a dropped/partial shard set.
+  _onFrameShard(msg) {
+    const frame = (msg && msg.data && msg.data.frame) || null;
+    if (!frame || !frame.chunk) return;
+    const total = frame.chunk_total || 1;
+    const idx = frame.chunk_index || 0;
+    if (total <= 1) {
+      // Single-shard frame: rebuild full and dispatch.
+      if (this._frameHandler) this._frameHandler({ data: { frame: { data: frame.chunk, metadata: frame.metadata || {} } } });
+      return;
+    }
+    const id = frame.frame_id;
+    if (!this._shards) this._shards = {};
+    this._shards[id] = this._shards[id] || { chunks: new Array(total), got: 0, metadata: frame.metadata || {}, timer: null };
+    const buf = this._shards[id];
+    if (!buf.chunks[idx]) { buf.chunks[idx] = frame.chunk; buf.got++; }
+    // Arm a timeout: if the shard set is incomplete after 1s, drop it (HTTP polling recovers).
+    if (!buf.timer) buf.timer = setTimeout(() => { delete this._shards[id]; }, 1000);
+    if (buf.got === total) {
+      clearTimeout(buf.timer);
+      const data = buf.chunks.join("");
+      delete this._shards[id];
+      if (this._frameHandler) this._frameHandler({ data: { frame: { data: data, metadata: buf.metadata } } });
+    }
   }
 
   onFrame(h) { this._frameHandler = h; }

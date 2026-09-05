@@ -94,16 +94,44 @@ module.exports = {
     const session = data.session || info.vault;
     const relayed = data.payload ?? data;
     delete relayed.channel; delete relayed.type;  // don't echo transport keys
-    // Use the unscoped wss.broadcastToVault so the browser receives frames even if its channel
-    // subscription isn't registering (channel-scoped broadcast has a subscription gate).
-    this._relay.wss.broadcastToVault(info.vault, { channel: "ob-browser", type, session, data: relayed });
-    // Keep the latest frame per vault for HTTP-polling clients (WS large-frame delivery is
-    // unreliable over some tunneled paths; a small HTTP GET works everywhere).
+    // Keep the latest frame per vault for HTTP-polling clients. For frames, do NOT broadcast the
+    // raw full frame over WS: a single large WS frame may be silently truncated over a tunneled/
+    // 代理 path (>32KB empirical, P6). Instead shard-broadcast (<=FRAME_CHUNK) and let the client
+    // recombine; HTTP polling (GET /frame) carries the full frame as the fallback. Non-frame types
+    // (status/start/stop/input/navigate/history/reload/eval/shot) are small and broadcast raw.
     if (type === "frame") {
       this._latestFrame = this._latestFrame || new Map();
       this._latestFrame.set(info.vault, { type: "frame", session, data: relayed, ts: Date.now() });
+      this._broadcastFrameShards(info.vault, session, relayed);
+    } else {
+      this._relay.wss.broadcastToVault(info.vault, { channel: "ob-browser", type, session, data: relayed });
     }
   },
+
+  // Shard a frame (data.frame.data is base64-jpeg) into FRAME_CHUNK-sized pieces and broadcast
+  // them as an ordered sequence of {type:"frame_shard"} messages. The client recombines by frame_id.
+  _broadcastFrameShards(vault, session, relayed) {
+    const frame = (relayed && relayed.frame) || relayed;
+    const raw = (frame && frame.data) || "";
+    const CHUNK = this._FRAME_CHUNK || 16 * 1024;
+    const frameId = String(Date.now()) + "-" + Math.random().toString(36).slice(2, 8);
+    if (!raw) return;
+    const meta = frame.metadata || {};
+    const total = Math.max(1, Math.ceil(raw.length / CHUNK));
+    for (let i = 0; i < total; i++) {
+      const chunk = raw.slice(i * CHUNK, (i + 1) * CHUNK);
+      const shard = { frame_id: frameId, chunk_index: i, chunk_total: total, metadata: meta, chunk: chunk };
+      this._relay.wss.broadcastToVault(vault, {
+        channel: "ob-browser",
+        type: "frame_shard",
+        session,
+        data: { token: relayed.token, session, frame: shard },
+      });
+    }
+    this._ctx.log(`ob-browser frame_shard x${total} (${raw.length}B) frame=${frameId}`);
+  },
+
+  _FRAME_CHUNK: 16 * 1024,
 
   // HTTP polling endpoint payload: latest frame for the caller's vault (no WS needed).
   latestFrameFor(vault) {

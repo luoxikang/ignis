@@ -28,8 +28,10 @@ class ObBrowserView extends ItemView {
     this.client.onFrame((msg) => this._onFrame(msg));
     this.client.onStatus((msg) => this._onStatus(msg));
 
-    // Kick off a session with the current address (or default blank).
-    const initial = (this.addressEl && this.addressEl.value) || "";
+    // Kick off a session with the current address (or the MVP default: 视频号助手 QR page).
+    // Empty address previously meant start url="" -> sidecar never navigated -> blank canvas.
+    const initial = (this.addressEl && this.addressEl.value) || "https://channels.weixin.qq.com";
+    if (!this.addressEl.value) this.addressEl.value = initial;
     this.client.open(initial).catch((e) => this._setStatus("init: " + e.message));
 
     // Defer to next microtask so channel subs are registered server-side after WS open.
@@ -81,7 +83,8 @@ class ObBrowserView extends ItemView {
   // Renders a frame. metadata: { deviceWidth, deviceHeight, pageScaleFactor, offsetTop, offsetBottom }.
   // Mapping: scale = cssWidth / deviceWidth; pageScaleFactor handles DPR for input coords.
   _onFrame(msg) {
-    const frame = msg.data || msg.frame;
+    // Relay wraps payload as data:{token, session, frame:{...}}; also accept a bare frame.
+    const frame = (msg.data && msg.data.frame) || msg.data || msg.frame;
     if (!frame || !frame.data) return;
     const meta = frame.metadata || {};
     this._loadedMedia = {
@@ -91,15 +94,22 @@ class ObBrowserView extends ItemView {
     };
     const img = new Image();
     img.onload = () => {
+      // Size the canvas backing store 1:1 to the frame pixels (default is 300x150,
+      // which CSS then stretches -> double blur). Draw 1:1; CSS scales for display.
+      if (this.canvasEl.width !== img.naturalWidth || this.canvasEl.height !== img.naturalHeight) {
+        this.canvasEl.width = img.naturalWidth || (meta.deviceWidth || 1280);
+        this.canvasEl.height = img.naturalHeight || (meta.deviceHeight || 800);
+      }
       const ctx = this.canvasEl.getContext("2d");
-      ctx.drawImage(img, 0, 0, this.canvasEl.width, this.canvasEl.height);
+      ctx.drawImage(img, 0, 0);
     };
     img.src = "data:image/jpeg;base64," + frame.data;
-    this._setStatus("live " + img.width + "x" + img.height);
+    this._setStatus("live " + (meta.deviceWidth || "?") + "x" + (meta.deviceHeight || "?"));
   }
 
   _onStatus(msg) {
-    if (msg && msg.text) this._setStatus(msg.text);
+    const t = (msg && msg.data && msg.data.text) || (msg && msg.text);
+    if (t) this._setStatus(t);
   }
 
   _setStatus(text) {

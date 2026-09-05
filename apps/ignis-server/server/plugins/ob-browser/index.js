@@ -45,7 +45,7 @@ module.exports = {
     this._ctx = ctx;
     ctx.log("ob-browser plugin registered");
     const channel = ctx.wss.channel("ob-browser");
-    this._relay = { channel, sessions: new Map() };
+    this._relay = { channel, wss: ctx.wss, sessions: new Map() };
 
     // Relay inbound WS messages: verify token, then fan out to the vault's subscribed peers.
     channel.on("frame", (msg) => this._relayToVault(msg, "frame"));
@@ -55,20 +55,44 @@ module.exports = {
     channel.on("input", (msg) => this._relayToVault(msg, "input"));
     channel.on("navigate", (msg) => this._relayToVault(msg, "navigate"));
     channel.on("history", (msg) => this._relayToVault(msg, "history"));
+    // Wire-type aliases: cdp-client's channel.send spreads the payload AFTER the wire type,
+    // so sendInput("mouse", {type:"mousePressed",...}) hits the wire as type:"mouse" (and
+    // "keyboard" likewise) instead of "input". Accept both spellings and relay as input.
+    channel.on("mouse", (msg) => this._relayInput(msg, "mouse"));
+    channel.on("keyboard", (msg) => this._relayInput(msg, "keyboard"));
 
-    const { mountRoutes } = require("./routes");
+    const mountRoutes = require("./routes");
     mountRoutes(ctx.router, this, { mintToken, verifyToken });
+  },
+
+  // Input relay for the alias wire types ("mouse"/"keyboard"): the client's message shape is
+  // {channel, type:kind, token, data:{...input fields...}} — token at TOP level, not in data.
+  // Rebuild the sidecar's expected shape {token, type:kind, data:{...}} and broadcast as "input".
+  _relayInput(msg, kind) {
+    const data = msg.data || {};
+    const info = verifyToken(msg.token || data.token);
+    this._ctx.log("ob-browser relay input " + kind + ":" + (data.type || "?") + " token=" + ((msg.token || data.token) ? "y" : "n") + " user=" + (info ? info.user : "x"));
+    if (!info) return;
+    const payload = { token: msg.token || data.token, type: kind, data };
+    this._relay.wss.broadcastToVault(info.vault, { channel: "ob-browser", type: "input", session: info.vault, data: payload });
   },
 
   // Verify the token bound to (user, vault), then broadcast a typed frame to that vault's channel
   // subscribers. Peers filter by type (client: frame/status; WP: start/stop/input/navigate/history),
   // so a single channel carries both directions without a kernel change.
   _relayToVault(msg, type) {
-    const data = msg.data || {};
+    // Browser client sends token at the top level ({type, token, url}); WP sidecar sends it in data.
+    // Read both so the relay forwards either form.
+    const data = msg.data || msg;
     const info = verifyToken(data.token);
+    this._ctx.log(`ob-browser relay ${type} token=${data.token ? "y" : "n"} user=${info ? info.user : "x"}`);  // relay debug
     if (!info) return;
     const session = data.session || info.vault;
-    this._relay.channel.broadcastToVault(info.vault, { type, session, data: data.payload ?? data });
+    const relayed = data.payload ?? data;
+    delete relayed.channel; delete relayed.type;  // don't echo transport keys
+    // Use the unscoped wss.broadcastToVault so the browser receives frames even if its channel
+    // subscription isn't registering (channel-scoped broadcast has a subscription gate).
+    this._relay.wss.broadcastToVault(info.vault, { channel: "ob-browser", type, session, data: relayed });
   },
 
   async shutdown() {

@@ -6,6 +6,15 @@ const { CdpClient } = require("./cdp-client");
 
 const VIEW_TYPE_BROWSER = "ignis-ob-browser";
 
+// Windows virtual key codes for non-printable keys (CDP dispatchKeyEvent needs them
+// for the page to recognize navigation/scroll keys; charCodeAt is wrong for these).
+const VK_MAP = {
+  Enter: 13, Backspace: 8, Tab: 9, Escape: 27, Space: 32, " ": 32,
+  PageUp: 33, PageDown: 34, End: 35, Home: 36,
+  ArrowLeft: 37, ArrowUp: 38, ArrowRight: 39, ArrowDown: 40,
+  Delete: 46, Insert: 45,
+};
+
 class ObBrowserView extends ItemView {
   constructor(leaf) {
     super(leaf);
@@ -62,7 +71,10 @@ class ObBrowserView extends ItemView {
 
     const reload = this.navigationEl.createEl("button", { text: "⟳", cls: "ob-browser-nav-btn" });
     reload.setAttr("aria-label", "Reload");
-    reload.onclick = () => { const u = this.addressEl.value; this.client.navigate(u); };
+    reload.onclick = () => {
+      const u = this.addressEl.value.trim();
+      if (u) this.client.navigate(u); else this.client.reload();
+    };
 
     this.addressEl = this.navigationEl.createEl("input", {
       type: "text", cls: "ob-browser-address", placeholder: "https://channels.weixin.qq.com",
@@ -153,10 +165,11 @@ class ObBrowserView extends ItemView {
       ev.preventDefault();
     });
     this.canvasEl.addEventListener("keydown", (ev) => {
-      send("keyboard", { type: "keyDown", key: ev.key, code: ev.code, modifiers: (ev.ctrlKey?1:0)|(ev.shiftKey?2:0)|(ev.altKey?4:0) });
+      send("keyboard", { type: "keyDown", key: ev.key, code: ev.code, vk: VK_MAP[ev.key], modifiers: (ev.ctrlKey?1:0)|(ev.shiftKey?2:0)|(ev.altKey?4:0) });
+      if (["ArrowUp","ArrowDown","PageUp","PageDown"," ","Home","End"].indexOf(ev.key) >= 0) ev.preventDefault();
     });
     this.canvasEl.addEventListener("keyup", (ev) => {
-      send("keyboard", { type: "keyUp", key: ev.key, code: ev.code, modifiers: (ev.ctrlKey?1:0)|(ev.shiftKey?2:0)|(ev.altKey?4:0) });
+      send("keyboard", { type: "keyUp", key: ev.key, code: ev.code, vk: VK_MAP[ev.key], modifiers: (ev.ctrlKey?1:0)|(ev.shiftKey?2:0)|(ev.altKey?4:0) });
     });
   }
 }

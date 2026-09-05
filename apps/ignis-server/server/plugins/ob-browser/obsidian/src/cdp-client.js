@@ -111,6 +111,11 @@ class CdpClient {
     this._chan.send("navigate", { token: this._token, url });
   }
 
+  reload() {
+    if (!this._chan) return;
+    this._chan.send("reload", { token: this._token });
+  }
+
   goBack() { if (this._chan) this._chan.send("history", { token: this._token, op: "back" }); }
   goForward() { if (this._chan) this._chan.send("history", { token: this._token, op: "forward" }); }
 }

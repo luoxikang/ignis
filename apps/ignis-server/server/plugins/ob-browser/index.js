@@ -60,6 +60,10 @@ module.exports = {
     // "keyboard" likewise) instead of "input". Accept both spellings and relay as input.
     channel.on("mouse", (msg) => this._relayInput(msg, "mouse"));
     channel.on("keyboard", (msg) => this._relayInput(msg, "keyboard"));
+    // Debug/E2E control types (relay preserving type; sidecar handles reload/eval/shot)
+    channel.on("reload", (msg) => this._relayToVault(msg, "reload"));
+    channel.on("eval", (msg) => this._relayToVault(msg, "eval"));
+    channel.on("shot", (msg) => this._relayToVault(msg, "shot"));
 
     const mountRoutes = require("./routes");
     mountRoutes(ctx.router, this, { mintToken, verifyToken });

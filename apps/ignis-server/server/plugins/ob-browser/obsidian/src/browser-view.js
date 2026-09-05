@@ -33,6 +33,9 @@ class ObBrowserView extends ItemView {
     const initial = (this.addressEl && this.addressEl.value) || "https://channels.weixin.qq.com";
     if (!this.addressEl.value) this.addressEl.value = initial;
     this.client.open(initial).catch((e) => this._setStatus("init: " + e.message));
+    // Frames via HTTP polling (works over any path; WS large frames are unreliable
+    // on some tunneled client networks). WS remains for input (small messages).
+    this.client.startPolling(500);
 
     // Defer to next microtask so channel subs are registered server-side after WS open.
     setTimeout(() => {
@@ -41,6 +44,7 @@ class ObBrowserView extends ItemView {
   }
 
   async onClose() {
+    this.client.stopPolling();
     try { this.client.close(); } catch {}
     this._loadedMedia = { width: 0, height: 0, pageScaleFactor: 1 };
   }

@@ -51,6 +51,28 @@ class CdpClient {
   onFrame(h) { this._frameHandler = h; }
   onStatus(h) { this._statusHandler = h; }
 
+  // HTTP polling fallback for frames: WS delivery of large frames is unreliable over
+  // some tunneled client paths; a small authenticated HTTP GET works everywhere.
+  // The server plugin keeps the latest frame per vault (GET /frame, tenant-anchored).
+  startPolling(intervalMs) {
+    if (this._pollTimer) return;
+    const tick = async () => {
+      try {
+        const res = await fetch("/api/ext/ob-browser/frame?vault=" + encodeURIComponent(vaultId()), { credentials: "same-origin" });
+        if (res.status === 200 && this._frameHandler) {
+          const j = await res.json();
+          this._frameHandler(j);
+        }
+      } catch (e) { /* transient network error: next tick retries */ }
+    };
+    tick();
+    this._pollTimer = setInterval(tick, intervalMs || 500);
+  }
+
+  stopPolling() {
+    if (this._pollTimer) { clearInterval(this._pollTimer); this._pollTimer = null; }
+  }
+
   // Wait until the ignis WS is connected (onOpen can fire before it is), so subscribe + start
   // are not dropped. This fixes the "onOpen stuck / client not initialized" race on reload.
   _ensureReady() {

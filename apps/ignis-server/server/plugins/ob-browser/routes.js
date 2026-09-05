@@ -13,6 +13,16 @@ module.exports = (router, plugin, auth) => {
     res.json({ token, ttl: 5 * 60e3, vault, user });
   });
 
+  // Latest-frame poll endpoint. tenant.js anchors req.query.vault to the caller's own
+  // vault, so a caller only ever polls its own session's frame. no-store: always fresh.
+  router.get("/frame", (req, res) => {
+    const vault = req.query.vault;
+    const frame = plugin.latestFrameFor ? plugin.latestFrameFor(vault) : null;
+    res.set("Cache-Control", "no-store");
+    if (!frame) return res.status(204).end();
+    res.json(frame);
+  });
+
   router.get("/status", (req, res) => {
     res.json({ ok: true, sessions: plugin._relay ? plugin._relay.sessions.size : 0 });
   });

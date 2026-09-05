@@ -93,6 +93,17 @@ module.exports = {
     // Use the unscoped wss.broadcastToVault so the browser receives frames even if its channel
     // subscription isn't registering (channel-scoped broadcast has a subscription gate).
     this._relay.wss.broadcastToVault(info.vault, { channel: "ob-browser", type, session, data: relayed });
+    // Keep the latest frame per vault for HTTP-polling clients (WS large-frame delivery is
+    // unreliable over some tunneled paths; a small HTTP GET works everywhere).
+    if (type === "frame") {
+      this._latestFrame = this._latestFrame || new Map();
+      this._latestFrame.set(info.vault, { type: "frame", session, data: relayed, ts: Date.now() });
+    }
+  },
+
+  // HTTP polling endpoint payload: latest frame for the caller's vault (no WS needed).
+  latestFrameFor(vault) {
+    return this._latestFrame ? this._latestFrame.get(vault) || null : null;
   },
 
   async shutdown() {

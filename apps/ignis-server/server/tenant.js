@@ -128,7 +128,15 @@ function setupTenant(app) {
   // Server-wide surfaces, closed: the CORS proxy has no tenant data path, plugin
   // routes and settings writes are process-global (settings GET stays read-only).
   app.use("/api/proxy", (req, res) => refuse(res));
-  app.use("/api/ext", (req, res) => refuse(res));
+  // Q1 (AZ-DSK-F-014): allow ob-browser plugin ext routes (identity gated above); refuse other /api/ext.
+  app.use("/api/ext", (req, res, next) => {
+    if (req.path === "/ob-browser" || req.path.startsWith("/ob-browser/")) {
+      req.query.vault = req._tenantSub;
+      req.body.vault = req._tenantSub;
+      return next();
+    }
+    return refuse(res);
+  });
   app.use("/api/plugins", (req, res, next) => {
     if (req.method === "GET") {
       return res.json([]);

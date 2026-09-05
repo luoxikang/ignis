@@ -140,7 +140,10 @@ class CdpClient {
 
   navigate(url) {
     if (!this._chan) return;
-    this._chan.send("navigate", { token: this._token, url });
+    // Defensive: ensure a bare domain gets a scheme (sidecar page.goto rejects "www.x.com").
+    const u = (url || "").trim();
+    const normalized = u && !/^[a-z][a-z0-9+.-]*:/i.test(u) ? "https://" + u : u;
+    this._chan.send("navigate", { token: this._token, url: normalized });
   }
 
   reload() {

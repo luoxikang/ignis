@@ -15,6 +15,16 @@ const VK_MAP = {
   Delete: 46, Insert: 45,
 };
 
+// Normalize a user-typed URL: add https:// if the scheme is missing (address bar sends bare
+// domains like "www.baidu.com" -> page.goto throws "Cannot navigate to invalid URL").
+function normalizeUrl(raw) {
+  const u = (raw || "").trim();
+  if (!u) return u;
+  if (/^https?:\/\//i.test(u)) return u;
+  // skip about:, data:, javascript:, file:, chrome-extension: and other schemes
+  if (/^[a-z][a-z0-9+.-]*:/i.test(u)) return u;
+  return "https://" + u;
+}
 class ObBrowserView extends ItemView {
   constructor(leaf) {
     super(leaf);
@@ -72,7 +82,7 @@ class ObBrowserView extends ItemView {
     const reload = this.navigationEl.createEl("button", { text: "⟳", cls: "ob-browser-nav-btn" });
     reload.setAttr("aria-label", "Reload");
     reload.onclick = () => {
-      const u = this.addressEl.value.trim();
+      const u = normalizeUrl(this.addressEl.value);
       if (u) this.client.navigate(u); else this.client.reload();
     };
 
@@ -82,7 +92,7 @@ class ObBrowserView extends ItemView {
     this.addressEl.addEventListener("keydown", (ev) => {
       if (ev.key === "Enter") {
         ev.preventDefault();
-        const u = this.addressEl.value.trim();
+        const u = normalizeUrl(this.addressEl.value);
         if (u) this.client.navigate(u);
       }
     });
